@@ -1,0 +1,8 @@
+[package]
+name = "bonomen"
+version = "0.1.0"
+authors = ["ner0x652 <cornel.punga@gmail.com>"]
+
+[dependencies]
+strsim = "0.5.2"
+clap   = "2.19.2"
