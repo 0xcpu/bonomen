@@ -1,15 +1,17 @@
 #[macro_use]
 extern crate clap;
+#[macro_use]
+extern crate log;
 
 use clap::{Arg, App};
 
 mod types;
+mod logger;
 
 use std::error::Error;
 use std::fs::File;
 use std::path::Path;
-use std::io::BufRead;
-use std::io::BufReader;
+use std::io::{BufRead, BufReader};
 use std::collections::HashMap;
 
 const BONOMEN_BANNER: &'static str = r"
@@ -22,6 +24,9 @@ const BONOMEN_BANNER: &'static str = r"
 const DEFAULT_FILE: &'static str = "default_procs.txt";
 
 fn main() {
+    //let logger = logger::init();
+    //logger.log("starting up!");
+    
     let matches = App::new(BONOMEN_BANNER)
         .version(crate_version!())
         .author(crate_authors!())
@@ -52,9 +57,9 @@ fn main() {
 
     let crit_proc_hm = read_procs_file(&file_name);
     for (pn, prop) in crit_proc_hm {
-        println!("{} : {}", pn, prop.threshold);
+        println!("{0} : {1}", pn, prop.threshold);
         for wle in prop.whitelist.iter() {
-            println!("{}", wle);
+            println!("{0}", wle);
         }
     }
 }
@@ -81,10 +86,14 @@ fn read_procs_file(file_name: &str) -> HashMap<std::string::String, types::ProcP
             wl.push(v[i].to_string());
         }
         
-        hash_map.insert(v[0].to_string(), types::ProcProps{ threshold: v[1].parse::<u32>().unwrap(),
-                                                whitelist: wl
-        });
+        hash_map.insert(v[0].to_string(),
+                        types::ProcProps{
+                            threshold: v[1].parse::<u32>().unwrap(),
+                            whitelist: wl
+                        }
+        );        
     }
 
     hash_map
 }
+

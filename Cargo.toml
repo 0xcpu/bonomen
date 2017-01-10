@@ -6,3 +6,4 @@ authors = ["ner0x652 <cornel.punga@gmail.com>"]
 [dependencies]
 strsim = "0.5.2"
 clap   = "2.19.2"
+log    = "*"
