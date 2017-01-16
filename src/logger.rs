@@ -2,7 +2,7 @@ use log::{LogRecord, LogLevel, LogMetadata};
 
 struct BonomenLogger;
 
-impl log::Log for BonomenLogger {
+impl ::log::Log for BonomenLogger {
     fn enabled(&self, metadata: &LogMetadata) -> bool {
         metadata.level() <= LogLevel::Info
     }
@@ -14,9 +14,9 @@ impl log::Log for BonomenLogger {
     }
 }
 
-pub fn init() -> Result<(), SetLoggerError> {
-    log::set_logger(|max_log_level| {
-        max_log_level.set(LogLevelFilter::Info);
+pub fn init() -> Result<(), ::log::SetLoggerError> {
+    ::log::set_logger(|max_log_level| {
+        max_log_level.set(::log::LogLevelFilter::Info);
         Box::new(BonomenLogger)
     })
 }
