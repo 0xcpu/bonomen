@@ -3,16 +3,23 @@ extern crate clap;
 #[macro_use]
 extern crate log;
 
-use clap::{Arg, App};
+extern crate psutil;
 
-mod types;
-mod logger;
+extern crate strsim;
+
+use clap::{Arg, App};
 
 use std::error::Error;
 use std::fs::File;
 use std::path::Path;
 use std::io::{BufRead, BufReader};
-use std::collections::HashMap;
+
+use psutil::process::Process;
+
+use strsim::damerau_levenshtein;
+
+mod types;
+mod logger;
 
 const BONOMEN_BANNER: &'static str = r"
       =======  ======= ==    == ======= ========== ====== ==    ==
@@ -24,20 +31,15 @@ const BONOMEN_BANNER: &'static str = r"
 const DEFAULT_FILE: &'static str = "default_procs.txt";
 
 fn main() {
-    //let logger = logger::init();
-    //logger.log("starting up!");
-    
+    // Init logger
+    logger::init().expect("failed to init logger");
+    info!("starting up!");
+
+    // Handle command line arguments
     let matches = App::new(BONOMEN_BANNER)
         .version(crate_version!())
         .author(crate_authors!())
         .about("Detect critical process impersonation")
-        .arg(Arg::with_name("proc")
-             .short("p")
-             .long("proc")
-             .value_name("NAME")
-             .help("Name of the process to check for impersonation")
-             .takes_value(true)
-             .required(true))
         .arg(Arg::with_name("file")
              .short("f")
              .long("file")
@@ -49,22 +51,22 @@ fn main() {
     println!("{}\n\tAuthor(s):{} Version:{}\n",
              BONOMEN_BANNER, crate_authors!(), crate_version!());
     
-    let proc_name = matches.value_of("proc").unwrap();
     let file_name = matches.value_of("file").unwrap_or(DEFAULT_FILE);
 
-    println!("Testing process with name: {}", proc_name);
+    // Load known standard system processes
     println!("Standard processes file: {}", file_name);
+    let crit_proc_vec = read_procs_file(&file_name);
 
-    let crit_proc_hm = read_procs_file(&file_name);
-    for (pn, prop) in crit_proc_hm {
-        println!("{0} : {1}", pn, prop.threshold);
-        for wle in prop.whitelist.iter() {
-            println!("{0}", wle);
-        }
-    }
+    // If user didn't input a process name, then check all running processes    
+    let sys_procs_vec = read_system_procs();
+
+    check_procs_impers(&crit_proc_vec, &sys_procs_vec);
 }
 
-fn read_procs_file(file_name: &str) -> HashMap<std::string::String, types::ProcProps> {
+// Read standard system processes from a file.
+// Each line in the file is of the format:
+// <process name>:<threshold value>:<process absolute path>
+fn read_procs_file(file_name: &str) -> Vec<types::ProcProps> {
     let path    = Path::new(file_name);
     let display = path.display();
 
@@ -73,27 +75,44 @@ fn read_procs_file(file_name: &str) -> HashMap<std::string::String, types::ProcP
         Ok(file) => file,
     };
     
-    let mut hash_map = HashMap::new();
+    let mut procs = Vec::new();
 
+    // Read whole file line by line, and unwrap each line
     let reader = BufReader::new(file);
     let lines  = reader.lines().map(|l| l.unwrap());
 
     for line in lines {
+        // Split each line into a vector
         let v: Vec<_> = line.split(';').map(|s| s.to_string()).collect();
         let mut wl    = Vec::new();
 
+        // Push process absolute path, may be more than 1 path
         for i in 2 .. v.len() {
             wl.push(v[i].to_string());
         }
-        
-        hash_map.insert(v[0].to_string(),
-                        types::ProcProps{
-                            threshold: v[1].parse::<u32>().unwrap(),
-                            whitelist: wl
-                        }
-        );        
+
+        procs.push(types::ProcProps {
+            name:      v[0].to_string(),
+            threshold: v[1].parse::<u32>().unwrap(),
+            whitelist: wl
+        });
     }
 
-    hash_map
+    procs
 }
 
+// Read running processes
+fn read_system_procs() ->  Vec<Process> {
+    psutil::process::all().unwrap()
+}
+
+fn check_procs_impers(crit_procs_vec: &Vec<types::ProcProps>,
+                      sys_procs_vec:  &Vec<Process>) {
+    for sys_proc in sys_procs_vec.iter() {
+        for crit_proc in crit_procs_vec.iter() {
+            let threshold = damerau_levenshtein(&sys_proc.comm, &crit_proc.name);
+
+            println!("{} - {} : threshold: {}", sys_proc.comm, crit_proc.name, threshold);
+        }
+    }
+}
