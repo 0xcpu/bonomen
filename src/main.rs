@@ -106,13 +106,20 @@ fn read_system_procs() ->  Vec<Process> {
     psutil::process::all().unwrap()
 }
 
+fn is_whitelisted(proc_path: &std::string::String, whitelist: &Vec<std::string::String>) -> bool {
+    whitelist.iter().any(|p| p == proc_path)
+}
+
 fn check_procs_impers(crit_procs_vec: &Vec<types::ProcProps>,
                       sys_procs_vec:  &Vec<Process>) {
     for sys_proc in sys_procs_vec.iter() {
         for crit_proc in crit_procs_vec.iter() {
             let threshold = damerau_levenshtein(&sys_proc.comm, &crit_proc.name);
 
-            println!("{} - {} : threshold: {}", sys_proc.comm, crit_proc.name, threshold);
+            if threshold > 0 && threshold <= crit_proc.threshold as usize &&
+                !is_whitelisted(&sys_proc.comm, &crit_proc.whitelist) {
+                println!("Suspicious: {} <-> {} : distance {}", sys_proc.comm, crit_proc.name, threshold);
+            }
         }
     }
 }
