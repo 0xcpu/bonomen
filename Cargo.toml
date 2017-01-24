@@ -7,4 +7,10 @@ authors = ["ner0x652 <cornel.punga@gmail.com>"]
 strsim = "0.5.2"
 clap   = "2.19.2"
 log    = "*"
-psutil = "1.0.0"
+psutil = { git = "https://github.com/ner0x652/rust-psutil" }
+
+[profile.dev]
+opt-level = 3
+
+[profile.release]
+debug-assertions = true

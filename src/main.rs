@@ -11,7 +11,7 @@ use clap::{Arg, App};
 
 use std::error::Error;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::io::{BufRead, BufReader};
 
 use psutil::process::Process;
@@ -57,10 +57,13 @@ fn main() {
     println!("Standard processes file: {}", file_name);
     let crit_proc_vec = read_procs_file(&file_name);
 
-    // If user didn't input a process name, then check all running processes    
+    // Read current active processes
     let sys_procs_vec = read_system_procs();
 
-    check_procs_impers(&crit_proc_vec, &sys_procs_vec);
+    // Check for process name impersonation
+    let r = check_procs_impers(&crit_proc_vec, &sys_procs_vec);
+
+    println!("Found {} suspicious processes.\n{}", r, "Done");
 }
 
 // Read standard system processes from a file.
@@ -106,20 +109,32 @@ fn read_system_procs() ->  Vec<Process> {
     psutil::process::all().unwrap()
 }
 
-fn is_whitelisted(proc_path: &std::string::String, whitelist: &Vec<std::string::String>) -> bool {
+fn is_whitelisted(proc_path: &str, whitelist: &Vec<std::string::String>) -> bool {
     whitelist.iter().any(|p| p == proc_path)
 }
 
 fn check_procs_impers(crit_procs_vec: &Vec<types::ProcProps>,
-                      sys_procs_vec:  &Vec<Process>) {
+                      sys_procs_vec:  &Vec<Process>) -> u32 {
+    // Number of suspicious processes
+    let mut susp_procs: u32 = 0;
+
     for sys_proc in sys_procs_vec.iter() {
         for crit_proc in crit_procs_vec.iter() {
             let threshold = damerau_levenshtein(&sys_proc.comm, &crit_proc.name);
 
+            let exe_path = match sys_proc.exe() {
+                Ok(path) => path,
+                Err(why) => PathBuf::from(why.description()),
+            };
+
             if threshold > 0 && threshold <= crit_proc.threshold as usize &&
-                !is_whitelisted(&sys_proc.comm, &crit_proc.whitelist) {
-                println!("Suspicious: {} <-> {} : distance {}", sys_proc.comm, crit_proc.name, threshold);
+                !is_whitelisted(&(exe_path.to_str().unwrap()), &crit_proc.whitelist) {
+                    println!("Suspicious: {} <-> {} : distance {}", sys_proc.comm, crit_proc.name, threshold);
+
+                    susp_procs += 1;
             }
         }
     }
+
+    susp_procs
 }
