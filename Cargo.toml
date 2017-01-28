@@ -1,13 +1,14 @@
 [package]
 name = "bonomen"
 version = "0.1.0"
-authors = ["ner0x652 <cornel.punga@gmail.com>"]
+authors = ["ner0x652 <https://github.com/ner0x652>"]
 
 [dependencies]
 strsim = "0.5.2"
 clap   = "2.19.2"
 log    = "*"
 psutil = { git = "https://github.com/ner0x652/rust-psutil" }
+libc   = "0.2"
 
 [profile.dev]
 opt-level = 3
