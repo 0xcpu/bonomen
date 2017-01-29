@@ -1,4 +1,4 @@
-# BOnus NOMEN - *good name*
+# BOnum NOMEN - *good name*
 
 # Hunt for Malware Critical Process Impersonation
 
