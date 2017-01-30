@@ -10,6 +10,8 @@ log    = "*"
 psutil = { git = "https://github.com/ner0x652/rust-psutil" }
 libc   = "0.2"
 term   = "*"
+winapi = "*"
+kernel32-sys = "*"
 
 [profile.dev]
 opt-level = 3

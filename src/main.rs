@@ -1,15 +1,24 @@
 #[macro_use]
 extern crate clap;
+
 #[macro_use]
 extern crate log;
 
+#[cfg(target_os = "linux")]
 extern crate psutil;
 
 extern crate strsim;
 
+#[cfg(target_os = "linux")]
 extern crate libc;
 
 extern crate term;
+
+#[cfg(target_os = "windows")]
+extern crate winapi;
+
+#[cfg(target_os = "windows")]
+extern crate kernel32;
 
 use clap::{Arg, App};
 
@@ -18,7 +27,9 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::io::{BufRead, BufReader, Write, stdout};
 use std::process::exit;
+use std::mem::size_of;
 
+#[cfg(target_os = "linux")]
 use psutil::process::Process;
 
 use strsim::damerau_levenshtein;
@@ -59,14 +70,15 @@ fn main() {
              BONOMEN_BANNER, crate_authors!(), crate_version!());
     terminal.reset().unwrap();
     
+    #[cfg(unix)]
     unsafe {
-        if libc::geteuid() != 0 {
+       	if libc::geteuid() != 0 {
             terminal.attr(term::Attr::Bold).unwrap();
             terminal.fg(term::color::RED).unwrap();
             println!("{}", "BONOMEN needs root privileges to read process executable path!");
             terminal.reset().unwrap();
             let _ = stdout().flush();
-
+            
             exit(0);
         }
     };
@@ -80,11 +92,19 @@ fn main() {
     terminal.reset().unwrap();
     let crit_proc_vec = read_procs_file(&file_name);
 
-    // Read current active processes
-    let sys_procs_vec = read_system_procs();
+    let mut r: u32 = 0;
 
-    // Check for process name impersonation
-    let r = check_procs_impers(&crit_proc_vec, &sys_procs_vec, &verb_mode, &mut terminal);
+    #[cfg(unix)] {
+        // Read current active processes
+        let sys_procs_vec = read_unix_system_procs();
+        
+        // Check for process name impersonation
+        r = check_procs_impers(&crit_proc_vec, &sys_procs_vec, &verb_mode, &mut terminal);
+    }
+
+    #[cfg(windows)] {
+        // windows code
+    }
 
     if r > 0 {
         terminal.fg(term::color::RED).unwrap();
@@ -136,14 +156,54 @@ fn read_procs_file(file_name: &str) -> Vec<types::ProcProps> {
 }
 
 // Read running processes
-fn read_system_procs() ->  Vec<Process> {
+#[cfg(target_os = "linux")]
+fn read_unix_system_procs() ->  Vec<Process> {
     psutil::process::all().unwrap()
+}
+
+#[cfg(target_os = "windows")]
+fn read_win_system_procs() {
+    const size: usize = 1024;
+    let mut pids = [0; size];
+    let mut written = 0;
+    unsafe {
+        let err = kernel32::K32EnumProcesses(pids.as_mut_ptr(), (pids.len() * size_of::<winapi::minwindef::DWORD>()) as u32, &mut written);
+    }
+    let processes = &pids[..(written / size_of::<winapi::minwindef::DWORD>() as u32) as usize]; // Slice trick thanks to WindowsBunny @ #rust
+    
+    //const name_sz: usize = 64;
+    let mut szProcessName: winapi::winnt::WCHAR = 0;
+    
+    for i in 0 .. processes.len() {
+        let processID: winapi::minwindef::DWORD = processes[i];
+        unsafe {
+            let hProcess = kernel32::OpenProcess(winapi::winnt::PROCESS_QUERY_INFORMATION | winapi::winnt::PROCESS_VM_READ,
+                                                 winapi::minwindef::FALSE, processID);
+	    
+            
+            if hProcess.is_null() {
+                let mut hMod = std::ptr::null_mut(); // std::mem::zeroed();
+                let mut cbNeeded = std::ptr::null_mut();
+	        
+                let res =  kernel32::K32EnumProcessModules(hProcess, hMod,
+                                                           size_of::<winapi::minwindef::HMODULE>() as u32,
+                                                           cbNeeded);
+		
+		if res != winapi::minwindef::FALSE {
+                    kernel32::K32GetModuleBaseNameW(hProcess, *hMod, &mut szProcessName,
+                                                    (size_of::<winapi::winnt::WCHAR>() / size_of::<winapi::winnt::WCHAR>()) as u32);
+		}
+            }
+	}
+        
+    }
 }
 
 fn is_whitelisted(proc_path: &str, whitelist: &Vec<std::string::String>) -> bool {
     whitelist.iter().any(|p| p == proc_path)
 }
 
+#[cfg(target_os = "linux")]
 fn check_procs_impers(crit_procs_vec: &Vec<types::ProcProps>,
                       sys_procs_vec : &Vec<Process>,
                       verb_mode     : &bool,
