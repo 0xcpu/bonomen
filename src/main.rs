@@ -9,7 +9,6 @@ extern crate psutil;
 
 extern crate strsim;
 
-#[cfg(target_os = "linux")]
 extern crate libc;
 
 extern crate term;
@@ -22,17 +21,33 @@ extern crate kernel32;
 
 use clap::{Arg, App};
 
+#[cfg(target_os = "linux")]
+use psutil::process::Process;
+
+use strsim::damerau_levenshtein;
+
 use std::error::Error;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::io::{BufRead, BufReader, Write, stdout};
 use std::process::exit;
 use std::mem::size_of;
+use std::ptr;
 
-#[cfg(target_os = "linux")]
-use psutil::process::Process;
+use winapi::psapi::*;
+use winapi::winnt::WCHAR;
+use winapi::winnt::HANDLE;
+use winapi::winnt::PROCESS_QUERY_INFORMATION;
+use winapi::winnt::PROCESS_VM_READ;
+use winapi::minwindef::HMODULE;
+use winapi::minwindef::DWORD;
+use winapi::minwindef::FALSE;
+use winapi::minwindef::MAX_PATH;
 
-use strsim::damerau_levenshtein;
+use kernel32::OpenProcess;
+use kernel32::K32EnumProcessModules;
+use kernel32::K32GetModuleBaseNameW;
+use kernel32::K32EnumProcesses;
 
 mod types;
 
@@ -65,7 +80,10 @@ fn main() {
 
     let mut terminal = term::stdout().unwrap();
 
-    terminal.attr(term::Attr::Bold).unwrap();
+    match terminal.attr(term::Attr::Reverse) {
+        Ok(ok)   => ok,
+        Err(why) => println!("{}", why.description()),
+    }
     println!("{}\n\tAuthor(s):{} Version:{}\n",
              BONOMEN_BANNER, crate_authors!(), crate_version!());
     terminal.reset().unwrap();
@@ -103,7 +121,7 @@ fn main() {
     }
 
     #[cfg(windows)] {
-        // windows code
+        read_win_system_procs();
     }
 
     if r > 0 {
@@ -163,39 +181,33 @@ fn read_unix_system_procs() ->  Vec<Process> {
 
 #[cfg(target_os = "windows")]
 fn read_win_system_procs() {
-    const size: usize = 1024;
-    let mut pids = [0; size];
+    const SIZE: usize = 1024;
+    let mut pids = [0; SIZE];
     let mut written = 0;
     unsafe {
-        let err = kernel32::K32EnumProcesses(pids.as_mut_ptr(), (pids.len() * size_of::<winapi::minwindef::DWORD>()) as u32, &mut written);
+        let _ = K32EnumProcesses(pids.as_mut_ptr(), (pids.len() * size_of::<DWORD>()) as u32, &mut written);
     }
-    let processes = &pids[..(written / size_of::<winapi::minwindef::DWORD>() as u32) as usize]; // Slice trick thanks to WindowsBunny @ #rust
-    
-    //const name_sz: usize = 64;
-    let mut szProcessName: winapi::winnt::WCHAR = 0;
+    let processes = &pids[..(written / size_of::<DWORD>() as u32) as usize]; // Slice trick thanks to WindowsBunny @ #rust
+
+    const name_sz: usize = 64;
+    let mut sz_process_name = [0; name_sz];
     
     for i in 0 .. processes.len() {
-        let processID: winapi::minwindef::DWORD = processes[i];
+        let process_id: DWORD = processes[i];
         unsafe {
-            let hProcess = kernel32::OpenProcess(winapi::winnt::PROCESS_QUERY_INFORMATION | winapi::winnt::PROCESS_VM_READ,
-                                                 winapi::minwindef::FALSE, processID);
+            let h_process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, process_id);
 	    
             
-            if hProcess.is_null() {
-                let mut hMod = std::ptr::null_mut(); // std::mem::zeroed();
-                let mut cbNeeded = std::ptr::null_mut();
+            if h_process.is_null() {
+                let mut h_mod = ptr::null_mut();
+                let mut cb_needed = ptr::null_mut();
 	        
-                let res =  kernel32::K32EnumProcessModules(hProcess, hMod,
-                                                           size_of::<winapi::minwindef::HMODULE>() as u32,
-                                                           cbNeeded);
+                K32EnumProcessModules(h_process, h_mod, size_of::<HMODULE>() as u32, cb_needed);
 		
-		if res != winapi::minwindef::FALSE {
-                    kernel32::K32GetModuleBaseNameW(hProcess, *hMod, &mut szProcessName,
-                                                    (size_of::<winapi::winnt::WCHAR>() / size_of::<winapi::winnt::WCHAR>()) as u32);
-		}
+                K32GetModuleBaseNameW(h_process, *h_mod, sz_process_name.as_mut_ptr(), name_sz as u32);
             }
 	}
-        
+        println!("pid: {}, name: {:?}", process_id, &sz_process_name[..]);
     }
 }
 
