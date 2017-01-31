@@ -4,7 +4,7 @@ extern crate clap;
 #[macro_use]
 extern crate log;
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 extern crate psutil;
 
 extern crate strsim;
@@ -13,15 +13,15 @@ extern crate libc;
 
 extern crate term;
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 extern crate winapi;
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 extern crate kernel32;
 
 use clap::{Arg, App};
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use psutil::process::Process;
 
 use strsim::damerau_levenshtein;
@@ -31,22 +31,29 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::io::{BufRead, BufReader, Write, stdout};
 use std::process::exit;
+#[cfg(windows)]
 use std::mem::size_of;
+#[cfg(windows)]
 use std::ptr;
 
-use winapi::psapi::*;
-use winapi::winnt::WCHAR;
-use winapi::winnt::HANDLE;
+#[cfg(windows)]
 use winapi::winnt::PROCESS_QUERY_INFORMATION;
+#[cfg(windows)]
 use winapi::winnt::PROCESS_VM_READ;
+#[cfg(windows)]
 use winapi::minwindef::HMODULE;
+#[cfg(windows)]
 use winapi::minwindef::DWORD;
+#[cfg(windows)]
 use winapi::minwindef::FALSE;
-use winapi::minwindef::MAX_PATH;
 
+#[cfg(windows)]
 use kernel32::OpenProcess;
+#[cfg(windows)]
 use kernel32::K32EnumProcessModules;
+#[cfg(windows)]
 use kernel32::K32GetModuleBaseNameW;
+#[cfg(windows)]
 use kernel32::K32EnumProcesses;
 
 mod types;
@@ -174,12 +181,12 @@ fn read_procs_file(file_name: &str) -> Vec<types::ProcProps> {
 }
 
 // Read running processes
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn read_unix_system_procs() ->  Vec<Process> {
     psutil::process::all().unwrap()
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn read_win_system_procs() {
     const SIZE: usize = 1024;
     let mut pids = [0; SIZE];
@@ -189,8 +196,8 @@ fn read_win_system_procs() {
     }
     let processes = &pids[..(written / size_of::<DWORD>() as u32) as usize]; // Slice trick thanks to WindowsBunny @ #rust
 
-    const name_sz: usize = 64;
-    let mut sz_process_name = [0; name_sz];
+    const NAME_SZ: usize = 64;
+    let mut sz_process_name = [0; NAME_SZ];
     
     for i in 0 .. processes.len() {
         let process_id: DWORD = processes[i];
@@ -198,16 +205,16 @@ fn read_win_system_procs() {
             let h_process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, process_id);
 	    
             
-            if h_process.is_null() {
-                let mut h_mod = ptr::null_mut();
-                let mut cb_needed = ptr::null_mut();
+            if !h_process.is_null() {
+                let h_mod = ptr::null_mut();
+                let cb_needed = ptr::null_mut();
 	        
                 K32EnumProcessModules(h_process, h_mod, size_of::<HMODULE>() as u32, cb_needed);
 		
-                K32GetModuleBaseNameW(h_process, *h_mod, sz_process_name.as_mut_ptr(), name_sz as u32);
+                K32GetModuleBaseNameW(h_process, *h_mod, sz_process_name.as_mut_ptr(), NAME_SZ as u32);
             }
 	}
-        println!("pid: {}, name: {:?}", process_id, &sz_process_name[..]);
+        println!("pid: {}, name: {:?}", process_id, String::from_utf16(&sz_process_name[..]).unwrap());
     }
 }
 
@@ -215,7 +222,7 @@ fn is_whitelisted(proc_path: &str, whitelist: &Vec<std::string::String>) -> bool
     whitelist.iter().any(|p| p == proc_path)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn check_procs_impers(crit_procs_vec: &Vec<types::ProcProps>,
                       sys_procs_vec : &Vec<Process>,
                       verb_mode     : &bool,
