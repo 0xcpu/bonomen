@@ -12,7 +12,7 @@ version = "0.2.8"
 version = "0.2.2"
 
 [dependencies]
-libc   = "0.2.20"
+libc   = "0.2.18"
 strsim = "0.5.2"
 clap   = "2.19.2"
 log    = "0.3.6"

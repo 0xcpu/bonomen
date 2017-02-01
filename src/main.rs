@@ -86,15 +86,17 @@ fn main() {
         .get_matches();
 
     let mut terminal = term::stdout().unwrap();
-
-    match terminal.attr(term::Attr::Reverse) {
-        Ok(ok)   => ok,
-        Err(why) => println!("{}", why.description()),
+    if terminal.supports_attr(term::Attr::Bold) {
+        match terminal.attr(term::Attr::Bold) {
+            Ok(ok)   => ok,
+            Err(why) => println!("{}", why.description()),
+        }
     }
+
     println!("{}\n\tAuthor(s):{} Version:{}\n",
              BONOMEN_BANNER, crate_authors!(), crate_version!());
     terminal.reset().unwrap();
-    
+
     #[cfg(unix)]
     unsafe {
        	if libc::geteuid() != 0 {
@@ -122,7 +124,6 @@ fn main() {
     #[cfg(unix)] {
         // Read current active processes
         let sys_procs_vec = read_unix_system_procs();
-        
         // Check for process name impersonation
         r = check_procs_impers(&crit_proc_vec, &sys_procs_vec, &verb_mode, &mut terminal);
     }
