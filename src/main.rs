@@ -55,6 +55,8 @@ use kernel32::K32EnumProcessModules;
 use kernel32::K32GetModuleBaseNameW;
 #[cfg(windows)]
 use kernel32::K32EnumProcesses;
+#[cfg(windows)]
+use kernel32::K32GetModuleFileNameExW;
 
 mod types;
 
@@ -199,6 +201,8 @@ fn read_win_system_procs() {
 
     const NAME_SZ: usize = 64;
     let mut sz_process_name = [0; NAME_SZ];
+    const PATH_SZ: usize = 254;
+    let mut sz_process_path = [0; PATH_SZ];
     
     for i in 0 .. processes.len() {
         let process_id: DWORD = processes[i];
@@ -207,15 +211,21 @@ fn read_win_system_procs() {
 	    
             
             if !h_process.is_null() {
-                let h_mod = ptr::null_mut();
+                let h_mod     = ptr::null_mut();
                 let cb_needed = ptr::null_mut();
 	        
                 K32EnumProcessModules(h_process, h_mod, size_of::<HMODULE>() as u32, cb_needed);
 		
                 K32GetModuleBaseNameW(h_process, *h_mod, sz_process_name.as_mut_ptr(), NAME_SZ as u32);
+
+                K32GetModuleFileNameExW(h_process, *h_mod, sz_process_path.as_mut_ptr(), PATH_SZ as u32);
             }
 	}
-        println!("pid: {}, name: {:?}", process_id, String::from_utf16(&sz_process_name[..]).unwrap());
+
+        let name_str = String::from_utf16(&sz_process_name[..]).unwrap();
+        let path_str = String::from_utf16(&sz_process_path[..]).unwrap();
+        println!("pid: {}, name: {:?}\n\tpath {:?}", process_id, name_str.split('\u{0}').next().unwrap_or(""),
+                 path_str.split('\u{0}').next().unwrap_or(""));
     }
 }
 
