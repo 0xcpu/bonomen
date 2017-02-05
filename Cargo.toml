@@ -1,6 +1,6 @@
 [package]
 name = "bonomen"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["ner0x652 <https://github.com/ner0x652>"]
 
 [target.'cfg(unix)'.dependencies.psutil]

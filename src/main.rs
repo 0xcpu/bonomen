@@ -28,8 +28,11 @@ use strsim::damerau_levenshtein;
 
 use std::error::Error;
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
 use std::io::{BufRead, BufReader, Write, stdout};
+#[cfg(unix)]
 use std::process::exit;
 #[cfg(windows)]
 use std::mem::size_of;
@@ -46,11 +49,13 @@ use winapi::minwindef::HMODULE;
 use winapi::minwindef::DWORD;
 #[cfg(windows)]
 use winapi::minwindef::FALSE;
+#[cfg(windows)]
+use winapi::psapi::LIST_MODULES_ALL;
 
 #[cfg(windows)]
 use kernel32::OpenProcess;
 #[cfg(windows)]
-use kernel32::K32EnumProcessModules;
+use kernel32::K32EnumProcessModulesEx;
 #[cfg(windows)]
 use kernel32::K32GetModuleBaseNameW;
 #[cfg(windows)]
@@ -127,11 +132,13 @@ fn main() {
         // Read current active processes
         let sys_procs_vec = read_unix_system_procs();
         // Check for process name impersonation
-        r = check_procs_impers(&crit_proc_vec, &sys_procs_vec, &verb_mode, &mut terminal);
+        r = unix_check_procs_impers(&crit_proc_vec, &sys_procs_vec, &verb_mode, &mut terminal);
     }
 
     #[cfg(windows)] {
-        read_win_system_procs();
+        let sys_procs_vec = read_win_system_procs(&mut terminal);
+
+        r = win_check_procs_impers(&crit_proc_vec, &sys_procs_vec, &verb_mode, &mut terminal);
     }
 
     if r > 0 {
@@ -155,7 +162,7 @@ fn read_procs_file(file_name: &str) -> Vec<types::ProcProps> {
         Err(why) => panic!("couldn't open {}: {}", display, why.description()),
         Ok(file) => file,
     };
-    
+
     let mut procs = Vec::new();
 
     // Read whole file line by line, and unwrap each line
@@ -183,19 +190,31 @@ fn read_procs_file(file_name: &str) -> Vec<types::ProcProps> {
     procs
 }
 
+fn is_whitelisted(proc_path: &str, whitelist: &Vec<std::string::String>) -> bool {
+    whitelist.iter().any(|p| p == proc_path)
+}
+
 // Read running processes
 #[cfg(unix)]
-fn read_unix_system_procs() ->  Vec<Process> {
+fn read_unix_system_procs() -> Vec<Process> {
     psutil::process::all().unwrap()
 }
 
 #[cfg(windows)]
-fn read_win_system_procs() {
+fn read_win_system_procs(terminal: &mut Box<term::StdoutTerminal>) -> Vec<types::WinProc> {
+    let mut win_procs = Vec::new();
+
     const SIZE: usize = 1024;
     let mut pids = [0; SIZE];
     let mut written = 0;
     unsafe {
-        let _ = K32EnumProcesses(pids.as_mut_ptr(), (pids.len() * size_of::<DWORD>()) as u32, &mut written);
+        if K32EnumProcesses(pids.as_mut_ptr(), (pids.len() * size_of::<DWORD>()) as u32, &mut written) == 0 {
+            terminal.fg(term::color::RED).unwrap();
+            println!("{}", "K32EnumProcesses failed!");
+            terminal.reset().unwrap();
+
+            return win_procs;
+        }
     }
     let processes = &pids[..(written / size_of::<DWORD>() as u32) as usize]; // Slice trick thanks to WindowsBunny @ #rust
 
@@ -214,30 +233,97 @@ fn read_win_system_procs() {
                 let h_mod     = ptr::null_mut();
                 let cb_needed = ptr::null_mut();
 	        
-                K32EnumProcessModules(h_process, h_mod, size_of::<HMODULE>() as u32, cb_needed);
-		
-                K32GetModuleBaseNameW(h_process, *h_mod, sz_process_name.as_mut_ptr(), NAME_SZ as u32);
+                if K32EnumProcessModulesEx(h_process, h_mod, size_of::<HMODULE>() as u32, cb_needed, LIST_MODULES_ALL) > 0 {
+                    terminal.fg(term::color::RED).unwrap();
+                    println!("PID: {} {}", process_id, "K32EnumProcessModules failed!");
+                    terminal.reset().unwrap();
 
-                K32GetModuleFileNameExW(h_process, *h_mod, sz_process_path.as_mut_ptr(), PATH_SZ as u32);
+                    continue;
+                } else {
+                    if K32GetModuleBaseNameW(h_process, *h_mod, sz_process_name.as_mut_ptr(), NAME_SZ as u32) == 0 {
+                        terminal.fg(term::color::RED).unwrap();
+                        println!("PID: {} {}", process_id, "K32GetModuleBaseNameW failed!");
+                        terminal.reset().unwrap();
+
+                        continue;
+                    } else {
+                        if K32GetModuleFileNameExW(h_process, *h_mod, sz_process_path.as_mut_ptr(), PATH_SZ as u32) == 0 {
+                            terminal.fg(term::color::RED).unwrap();
+                            println!("PID: {} {}", process_id, "K32GetModuleFileNameExW failed!");
+                            terminal.reset().unwrap();
+
+                            continue;
+                        }
+                    }
+                }
             }
 	}
 
-        let name_str = String::from_utf16(&sz_process_name[..]).unwrap();
-        let path_str = String::from_utf16(&sz_process_path[..]).unwrap();
-        println!("pid: {}, name: {:?}\n\tpath {:?}", process_id, name_str.split('\u{0}').next().unwrap_or(""),
-                 path_str.split('\u{0}').next().unwrap_or(""));
+        let name_str = String::from_utf16(&sz_process_name[..])
+            .unwrap()
+            .split('\u{0}')
+            .next()
+            .unwrap_or("")
+            .to_string();
+        let path_str = String::from_utf16(&sz_process_path[..])
+            .unwrap()
+            .split('\u{0}')
+            .next()
+            .unwrap_or("")
+            .to_string();
+
+        if name_str != "" && path_str != "" {
+            win_procs.push(types::WinProc {
+                name    : name_str,
+                exe_path: path_str
+            });
+        }
     }
+
+    win_procs
 }
 
-fn is_whitelisted(proc_path: &str, whitelist: &Vec<std::string::String>) -> bool {
-    whitelist.iter().any(|p| p == proc_path)
+#[cfg(windows)]
+fn win_check_procs_impers(crit_procs_vec: &Vec<types::ProcProps>,
+                          sys_procs_vec : &Vec<types::WinProc>,
+                          verb_mode     : &bool,
+                          terminal      : &mut Box<term::StdoutTerminal>) -> u32 {
+    let mut susp_procs: u32 = 0;
+
+    for sys_proc in sys_procs_vec.iter() {
+        if *verb_mode {
+            terminal.fg(term::color::BRIGHT_GREEN).unwrap();
+            println!("> Checking system process: {}", sys_proc.name);
+            println!("> system process executable absolute path: {}", sys_proc.exe_path);
+        }
+
+        for crit_proc in crit_procs_vec.iter() {
+            let threshold = damerau_levenshtein(&sys_proc.name, &crit_proc.name);
+            if *verb_mode {
+                terminal.fg(term::color::CYAN).unwrap();
+                println!( "\tagainst critical process: {}, distance: {}", crit_proc.name, threshold);
+                terminal.reset().unwrap();
+            }
+
+            if threshold > 0 && threshold <= crit_proc.threshold as usize &&
+                !is_whitelisted(&sys_proc.exe_path, &crit_proc.whitelist) {
+                    terminal.fg(term::color::RED).unwrap();
+                    println!("Suspicious: {} <-> {} : distance {}", sys_proc.name, crit_proc.name, threshold);
+                    terminal.reset().unwrap();
+
+                    susp_procs += 1;
+            }
+        }
+    }
+
+    susp_procs
 }
 
 #[cfg(unix)]
-fn check_procs_impers(crit_procs_vec: &Vec<types::ProcProps>,
-                      sys_procs_vec : &Vec<Process>,
-                      verb_mode     : &bool,
-                      terminal      : &mut Box<term::StdoutTerminal>) -> u32 {
+fn unix_check_procs_impers(crit_procs_vec: &Vec<types::ProcProps>,
+                           sys_procs_vec : &Vec<Process>,
+                           verb_mode     : &bool,
+                           terminal      : &mut Box<term::StdoutTerminal>) -> u32 {
     // Number of suspicious processes
     let mut susp_procs: u32 = 0;
 
