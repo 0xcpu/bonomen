@@ -32,8 +32,10 @@ where:
 ## Requirements
 
    * Unix OS (developed and tested on Debian GNU/Linux 8 64-bit).
+
+   * Windows OS (developed and tested on Windows 10 64-bit).
    
-   * Rust programming language(developed with Rust 1.13.0), if you want to compile yourself the code.
+   * Rust programming language version >= 1.13.0
    
    * File containing system critical processes using the following format:
    
@@ -48,3 +50,12 @@ where:
      sshd;2;/usr/sbin/sshd
      ```
     
+## References & Acknowledgements
+
+   * [Damerau-Levenshtein distance](https://en.wikipedia.org/wiki/Damerau%E2%80%93Levenshtein_distance)
+
+   * [Rust Docs](https://www.rust-lang.org/en-US/documentation.html)
+
+   * Rust IRC #rust, especially to @retep998 and @DoumanAsh for helping with Windows support, @mbrubeck, @steveklabnik, @Quxxy, @Havvy. Thank you!
+
+   * [Detect-Respong blog](https://detect-respond.blogspot.ro/2016/11/hunting-for-malware-critical-process.html) The implementation idea came from this article. Thank you!
