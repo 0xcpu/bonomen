@@ -74,4 +74,4 @@ where:
 
    * Rust IRC #rust, especially to @retep998 and @DoumanAsh for helping with Windows support, @mbrubeck, @steveklabnik, @Quxxy, @Havvy. Thank you!
 
-   * [Detect-Respong blog](https://detect-respond.blogspot.ro/2016/11/hunting-for-malware-critical-process.html) The implementation idea came from this article. Thank you!
+   * [Detect-Respond blog](https://detect-respond.blogspot.ro/2016/11/hunting-for-malware-critical-process.html) The implementation idea came from this article. Thank you!
