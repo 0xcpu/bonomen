@@ -29,6 +29,22 @@ where:
  		    check for processes that may be whitelisted.
 
 
+## Compile
+
+   In the root directory, for
+
+   * release version, run:
+
+   ```cargo build --release```
+
+   * debug version, run:
+
+   ```cargo build```
+
+
+   The compiled executable will be in `target\{release|debug}\`
+
+
 ## Requirements
 
    * Unix OS (developed and tested on Debian GNU/Linux 8 64-bit).
