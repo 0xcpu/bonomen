@@ -1,15 +1,22 @@
 [package]
 name = "bonomen"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["ner0x652 <https://github.com/ner0x652>"]
 
+[target.'cfg(unix)'.dependencies.psutil]
+git = "https://github.com/ner0x652/rust-psutil"
+version = "1.0.0"
+[target.'cfg(windows)'.dependencies.winapi]
+version = "0.2.8"
+[target.'cfg(windows)'.dependencies.kernel32-sys]
+version = "0.2.2"
+
 [dependencies]
+libc   = "0.2.18"
 strsim = "0.5.2"
 clap   = "2.19.2"
-log    = "*"
-psutil = { git = "https://github.com/ner0x652/rust-psutil" }
-libc   = "0.2"
-term   = "*"
+log    = "0.3.6"
+term   = "0.4.4"
 
 [profile.dev]
 opt-level = 3
