@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate clap;
 
-#[macro_use]
 extern crate log;
 
 #[cfg(unix)]
@@ -126,7 +125,7 @@ fn main() {
     terminal.reset().unwrap();
     let crit_proc_vec = read_procs_file(&file_name);
 
-    let mut r: u32 = 0;
+    let r;
 
     #[cfg(unix)] {
         // Read current active processes
