@@ -1,20 +1,21 @@
 [package]
 name = "bonomen"
 version = "0.2.0"
-authors = ["ner0x652 <https://github.com/ner0x652>"]
+authors = ["0xcpu <https://github.com/0xcpu>"]
 
 [target.'cfg(windows)'.dependencies.winapi]
-version = "0.2.8"
+version = "*"
 [target.'cfg(windows)'.dependencies.kernel32-sys]
-version = "0.2.2"
+version = "*"
+[target.'cfg(unix)'.dependencies.psutil]
+version = "*"
 
 [dependencies]
-libc   = "0.2.18"
-strsim = "0.5.2"
-clap   = "2.19.2"
-log    = "0.3.6"
-term   = "0.4.4"
-psutil = "1.1.0"
+libc   = "*"
+strsim = "*"
+clap   = "*"
+log    = "*"
+term   = "*"
 
 [profile.dev]
 opt-level = 3

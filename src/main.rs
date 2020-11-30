@@ -1,31 +1,24 @@
 #[macro_use]
 extern crate clap;
-
 extern crate log;
-
-#[cfg(unix)]
-extern crate psutil;
-
 extern crate strsim;
-
-extern crate libc;
-
 extern crate term;
 
 #[cfg(windows)]
 extern crate winapi;
-
 #[cfg(windows)]
 extern crate kernel32;
+
+#[cfg(unix)]
+extern crate psutil;
+#[cfg(unix)]
+extern crate libc;
 
 use clap::{Arg, App};
 
 #[cfg(unix)]
 use psutil::process::Process;
-
 use strsim::damerau_levenshtein;
-
-use std::error::Error;
 use std::fs::File;
 use std::path::Path;
 #[cfg(unix)]
@@ -95,7 +88,7 @@ fn main() {
     if terminal.supports_attr(term::Attr::Bold) {
         match terminal.attr(term::Attr::Bold) {
             Ok(ok)   => ok,
-            Err(why) => println!("{}", why.description()),
+            Err(why) => println!("{}", why.to_string()),
         }
     }
 
@@ -158,7 +151,7 @@ fn read_procs_file(file_name: &str) -> Vec<types::ProcProps> {
     let display = path.display();
 
     let file = match File::open(&path) {
-        Err(why) => panic!("couldn't open {}: {}", display, why.description()),
+        Err(why) => panic!("couldn't open {}: {}", display, why.to_string()),
         Ok(file) => file,
     };
 
@@ -329,7 +322,7 @@ fn unix_check_procs_impers(crit_procs_vec: &Vec<types::ProcProps>,
     for sys_proc in sys_procs_vec.iter() {
         let exe_path = match sys_proc.exe() {
             Ok(path) => path,
-            Err(why) => PathBuf::from(why.description()),
+            Err(why) => PathBuf::from(why.to_string()),
         };
 
         if *verb_mode {
